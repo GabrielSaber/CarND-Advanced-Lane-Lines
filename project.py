@@ -6,8 +6,17 @@ import glob
 
 
 '''
+globale variables
+'''
+# Define conversions in x and y from pixels space to meters
+ym_per_pix = 30/720 # meters per pixel in y dimension
+xm_per_pix = 3.7/700 # meters per pixel in x dimension
+
+'''
 brief   funtion to calibrate the camera
+
 input   nothing 
+
 return  mtx  ==> camera matrix  used to transform 3D object points to 2D image points
         dist ==> distortion coefficient    
 '''
@@ -46,9 +55,11 @@ def calibrate_camera():
 
 '''
 brief   funtion to undistort image
+
 input   distorted_img ==> distorted image
         mtx  ==> camera matrix  used to transform 3D object points to 2D image points
         dist ==> distortion coefficient
+
 return  undistorted image
 '''
 def undistort_image(distorted_img, mtx, dist):
@@ -57,6 +68,7 @@ def undistort_image(distorted_img, mtx, dist):
 
 '''
 brief   funtion to plot two images on x axis
+
 input   img1 ==> first image
         img2 ==> second image
         text1 ==> first text
@@ -71,17 +83,25 @@ def plot(img1, img2, text1='image_1', text2 ='image_2'):
     ax2.set_title(text2, fontsize=20)
     plt.subplots_adjust(left=0., right=1, top=0.9, bottom=0.)
     
+'''
+brief   funtion to get the combined binary image from color threshold and gradient threshold 
 
-def color_gradient_combined_binary(img, color_thrshld=(170, 255), grad_thrshld=(20, 100)):
+input   undist_img ==> undistored image
+        color_thrshld ==> second image
+        grad_thrshld ==> first text
+        
+return combined_binary ==> combined binary image from color threshold and gradient threshold
+'''
+def color_gradient_combined_binary(undist_img, color_thrshld=(170, 255), grad_thrshld=(20, 100)):
     # Convert to HLS color space and separate the S channel
     # Note: img is the undistorted image
-    hls = cv2.cvtColor(img, cv2.COLOR_RGB2HLS)
+    hls = cv2.cvtColor(undist_img, cv2.COLOR_RGB2HLS)
     s_channel = hls[:,:,2]
     
     # Grayscale image
     # NOTE: we already saw that standard grayscaling lost color information for the lane lines
     # Explore gradients in other colors spaces / color channels to see what might work better
-    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    gray = cv2.cvtColor(undist_img, cv2.COLOR_RGB2GRAY)
     
     # Sobel x
     sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0) # Take the derivative in x
@@ -103,8 +123,13 @@ def color_gradient_combined_binary(img, color_thrshld=(170, 255), grad_thrshld=(
     return combined_binary
 
 
-# Define a function that takes an image, number of x and y points, 
-# camera matrix and distortion coefficients
+'''
+brief   funtion to warp the image to bird eye view
+input   img ==> image to warp
+return  warped ==> warped image 
+        M ==> warp matrix
+        Minv ==> warp inverse matrix
+'''
 def warp_image_topview(img):
     img_size = img.shape[::-1]
     src = np.float32([[580, 460],
@@ -126,6 +151,14 @@ def warp_image_topview(img):
 
     return warped, M, Minv
 
+'''
+brief   funtion to detect lane in first frame
+
+input   binary_warped_img ==> binary wraped bird eye image
+
+return  left_fit ==> left lane
+        right_fit ==> right lane
+'''
 def find_lanes_first_frame(binary_warped_img):
     
     # Assuming you have created a warped binary image called "binary_warped"
@@ -200,7 +233,7 @@ def find_lanes_first_frame(binary_warped_img):
     left_fit = np.polyfit(lefty, leftx, 2)
     right_fit = np.polyfit(righty, rightx, 2)
     
-    
+    '''
     # Generate x and y values for plotting
     ploty = np.linspace(0, binary_warped_img.shape[0]-1, binary_warped_img.shape[0] )
     left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
@@ -208,7 +241,7 @@ def find_lanes_first_frame(binary_warped_img):
     
     out_img[nonzeroy[left_lane_inds], nonzerox[left_lane_inds]] = [255, 0, 0]
     out_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255]
-    '''
+    
     plt.imshow(out_img)
     plt.plot(left_fitx, ploty, color='yellow')
     plt.plot(right_fitx, ploty, color='yellow')
@@ -218,6 +251,17 @@ def find_lanes_first_frame(binary_warped_img):
     
     return left_fit, right_fit
 
+'''
+brief   funtion to detect lane in first frame
+
+input   binary_warped_img ==> binary wraped bird eye image
+        left_fit ==> left lane found from pervious frame
+        right_fit ==> right lane found from pervious frame
+
+return  ploty ==> 
+        left_fitx ==> x values for plotting
+        right_fitx ==> y values for plotting
+'''
 def find_lanes_next_frame(binary_warped, left_fit, right_fit):    
     # Assume you now have a new warped binary image 
     # from the next frame of video (also called "binary_warped")
@@ -246,7 +290,8 @@ def find_lanes_next_frame(binary_warped, left_fit, right_fit):
     ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0] )
     left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
     right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
-    
+     
+    '''
     # Create an image to draw on and an image to show the selection window
     out_img = np.dstack((binary_warped, binary_warped, binary_warped))*255
     window_img = np.zeros_like(out_img)
@@ -269,7 +314,7 @@ def find_lanes_next_frame(binary_warped, left_fit, right_fit):
     cv2.fillPoly(window_img, np.int_([left_line_pts]), (0,255, 0))
     cv2.fillPoly(window_img, np.int_([right_line_pts]), (0,255, 0))
     result = cv2.addWeighted(out_img, 1, window_img, 0.3, 0)
-    '''
+   
     plt.imshow(result)
     plt.plot(left_fitx, ploty, color='yellow')
     plt.plot(right_fitx, ploty, color='yellow')
@@ -278,13 +323,20 @@ def find_lanes_next_frame(binary_warped, left_fit, right_fit):
     '''
     return ploty, left_fitx, right_fitx
     
-    
+'''
+brief   funtion to calulate lane curveture
+
+input   ploty ==> 
+        left_fitx ==> x values for plotting
+        right_fitx ==> y values for plotting
+        
+retuen  left_curverad ==> left lane curveture radius
+        right_curverad ==> right lane curveture radius
+'''
+  
 def calculate_curveture(ploty, leftx, rightx):
     
     y_eval = np.max(ploty)
-   # Define conversions in x and y from pixels space to meters
-    ym_per_pix = 30/720 # meters per pixel in y dimension
-    xm_per_pix = 3.7/700 # meters per pixel in x dimension
     
     # Fit new polynomials to x,y in world space
     left_fit_cr = np.polyfit(ploty*ym_per_pix, leftx*xm_per_pix, 2)
@@ -292,12 +344,23 @@ def calculate_curveture(ploty, leftx, rightx):
     # Calculate the new radii of curvature
     left_curverad = ((1 + (2*left_fit_cr[0]*y_eval*ym_per_pix + left_fit_cr[1])**2)**1.5) / np.absolute(2*left_fit_cr[0])
     right_curverad = ((1 + (2*right_fit_cr[0]*y_eval*ym_per_pix + right_fit_cr[1])**2)**1.5) / np.absolute(2*right_fit_cr[0])
-    # Now our radius of curvature is in meters
-    print(left_curverad, 'm', right_curverad, 'm')
-    # Example values: 632.1 m    626.2 m
+    
     return left_curverad, right_curverad
 
-def draw(img, binary_warped, Minv, ploty, left_fitx, right_fitx):
+'''
+brief   funtion to draw lane polygon on the image and print lane curveture text
+
+input   undist_img ==> input undistorted image
+        binary_warped ==> binary wraped bird eye image
+        Minv ==> Minv ==> warp inverse matrix
+        ploty ==> 
+        left_fitx ==> left lane points
+        right_fitx ==> right lane points
+        
+retuen  result ==> output image with detected lane polygon and curveture text
+       
+'''
+def draw(undist_img, binary_warped, Minv, ploty, left_fitx, right_fitx):
     
     # Create an image to draw the lines on
     warp_zero = np.zeros_like(binary_warped).astype(np.uint8)
@@ -312,39 +375,71 @@ def draw(img, binary_warped, Minv, ploty, left_fitx, right_fitx):
     cv2.fillPoly(color_warp, np.int_([pts]), (0,255, 0))
     
     # Warp the blank back to original image space using inverse perspective matrix (Minv)
-    newwarp = cv2.warpPerspective(color_warp, Minv, (img.shape[1], img.shape[0])) 
+    newwarp = cv2.warpPerspective(color_warp, Minv, (undist_img.shape[1], undist_img.shape[0])) 
+
+    left_curverad, right_curverad = calculate_curveture(ploty, left_fitx, right_fitx)
+    
+    lane_curverad = (left_curverad + right_curverad)/2
+
+    cv2.putText(undist_img,'Radius of curvature  = %.2f m'%(lane_curverad),(50,50),
+                cv2.FONT_HERSHEY_SIMPLEX, 1,(255,255,255),2,cv2.LINE_AA)
+    
+    lane_center =  (right_fitx[-1] - left_fitx[-1])/2 + left_fitx[-1]
+    car_pos = undist_img.shape[1]/2 
+    car_pos_wrt_lane_center = (car_pos - lane_center)*xm_per_pix
+   
+    text = "Vehicle is %.2fm " % abs(car_pos_wrt_lane_center)
+    
+    if car_pos_wrt_lane_center < 0:
+        text = text + "left of the center"
+        
+    else:
+        text = text + "right of the center"
+        
+    cv2.putText(undist_img,text,(50,100), cv2.FONT_HERSHEY_SIMPLEX, 1,(255,255,255),2,cv2.LINE_AA)
+   
+    
     # Combine the result with the original image
-    result = cv2.addWeighted(img, 1, newwarp, 0.3, 0)
+    result = cv2.addWeighted(undist_img, 1, newwarp, 0.3, 0)
     
     #plt.imshow(result)
     return result
     
 
-#pipline
-def pipeline(image):
+'''
+brief   the process image function
+
+input   img == > inputimage
+    
+retuen  result ==> output image with detected lane polygon and curveture text
+       
+'''
+def process_image(image):
     dst = undistort_image(image, mtx, dist)
     binary_img = color_gradient_combined_binary(dst)
     binary_warped, M, Minv = warp_image_topview(binary_img)
     left_fit_first, right_fit_first = find_lanes_first_frame(binary_warped)
     ploty, left_fitx_next, right_fitx_next = find_lanes_next_frame(binary_warped, left_fit_first, right_fit_first)
-    left_curverad, right_curverad = calculate_curveture(ploty, left_fitx_next, right_fitx_next)
-    result = draw(image, binary_warped, Minv, ploty, left_fitx_next, right_fitx_next)
+    result = draw(dst, binary_warped, Minv, ploty, left_fitx_next, right_fitx_next)
     return result
     
+#calibrate camera
 mtx, dist = calibrate_camera()
+
+#test image
+im = mpimg.imread("test_images/straight_lines1.jpg")
+result = process_image(im)
+plt.imshow(result)
 
 
 # Import everything needed to edit/save/watch video clips
 from moviepy.editor import VideoFileClip
-from IPython.display import HTML
 
+'''
+import and process video
+'''
 white_output = 'output_video/output_video.mp4'
-## To speed up the testing process you may want to try your pipeline on a shorter subclip of the video
-## To do so add .subclip(start_second,end_second) to the end of the line below
-## Where start_second and end_second are integer values representing the start and end of the subclip
-## You may also uncomment the following line for a subclip of the first 5 seconds
-##clip1 = VideoFileClip("test_videos/solidWhiteRight.mp4").subclip(0,5)
 clip1 = VideoFileClip("project_video.mp4")
-white_clip = clip1.fl_image(pipeline) #NOTE: this function expects color images!!
+white_clip = clip1.fl_image(process_image)
 white_clip.write_videofile(white_output, audio=False)
 
