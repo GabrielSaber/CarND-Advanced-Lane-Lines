@@ -291,14 +291,15 @@ def find_lanes_next_frame(binary_warped, left_fit, right_fit):
     left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
     right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
      
-    '''
+   
     # Create an image to draw on and an image to show the selection window
     out_img = np.dstack((binary_warped, binary_warped, binary_warped))*255
     window_img = np.zeros_like(out_img)
     # Color in left and right line pixels
-    out_img[nonzeroy[left_lane_inds], nonzerox[left_lane_inds]] = [255, 0, 0]
-    out_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255]
-    
+    window_img[nonzeroy[left_lane_inds], nonzerox[left_lane_inds]] = [255, 0, 0]
+    window_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255]
+   
+    '''
     # Generate a polygon to illustrate the search window area
     # And recast the x and y points into usable format for cv2.fillPoly()
     left_line_window1 = np.array([np.transpose(np.vstack([left_fitx-margin, ploty]))])
@@ -313,15 +314,19 @@ def find_lanes_next_frame(binary_warped, left_fit, right_fit):
     # Draw the lane onto the warped blank image
     cv2.fillPoly(window_img, np.int_([left_line_pts]), (0,255, 0))
     cv2.fillPoly(window_img, np.int_([right_line_pts]), (0,255, 0))
-    result = cv2.addWeighted(out_img, 1, window_img, 0.3, 0)
    
+    
+    result = cv2.addWeighted(out_img, 1, window_img, 0.3, 0)
+    
+     
     plt.imshow(result)
     plt.plot(left_fitx, ploty, color='yellow')
     plt.plot(right_fitx, ploty, color='yellow')
     plt.xlim(0, 1280)
     plt.ylim(720, 0)
     '''
-    return ploty, left_fitx, right_fitx
+  
+    return window_img, ploty, left_fitx, right_fitx
     
 '''
 brief   funtion to calulate lane curveture
@@ -351,6 +356,7 @@ def calculate_curveture(ploty, leftx, rightx):
 brief   funtion to draw lane polygon on the image and print lane curveture text
 
 input   undist_img ==> input undistorted image
+        color_warped ==> color wraped image with detected lanes(output from  lane detection phase)
         binary_warped ==> binary wraped bird eye image
         Minv ==> Minv ==> warp inverse matrix
         ploty ==> 
@@ -360,11 +366,11 @@ input   undist_img ==> input undistorted image
 retuen  result ==> output image with detected lane polygon and curveture text
        
 '''
-def draw(undist_img, binary_warped, Minv, ploty, left_fitx, right_fitx):
+def draw(undist_img, color_warped, binary_warped, Minv, ploty, left_fitx, right_fitx):
     
     # Create an image to draw the lines on
     warp_zero = np.zeros_like(binary_warped).astype(np.uint8)
-    color_warp = np.dstack((warp_zero, warp_zero, warp_zero))
+    binary_warped_color = np.dstack((warp_zero, warp_zero, warp_zero))
     
     # Recast the x and y points into usable format for cv2.fillPoly()
     pts_left = np.array([np.transpose(np.vstack([left_fitx, ploty]))])
@@ -372,16 +378,23 @@ def draw(undist_img, binary_warped, Minv, ploty, left_fitx, right_fitx):
     pts = np.hstack((pts_left, pts_right))
     
     # Draw the lane onto the warped blank image
-    cv2.fillPoly(color_warp, np.int_([pts]), (0,255, 0))
+    cv2.fillPoly(binary_warped_color, np.int_([pts]), (0,255, 0))
     
     # Warp the blank back to original image space using inverse perspective matrix (Minv)
-    newwarp = cv2.warpPerspective(color_warp, Minv, (undist_img.shape[1], undist_img.shape[0])) 
+    newwarp = cv2.warpPerspective(binary_warped_color, Minv, (undist_img.shape[1], undist_img.shape[0])) 
+    
+    # Warp the blank back to original image space using inverse perspective matrix (Minv)
+    newwarp1 = cv2.warpPerspective(color_warped, Minv, (undist_img.shape[1], undist_img.shape[0])) 
+    
+    # Combine the result with the original image
+    result = cv2.addWeighted(undist_img, 1, newwarp, 0.3, 0)
+    result = cv2.addWeighted(newwarp1, 1, result, 0.8, 0)
 
     left_curverad, right_curverad = calculate_curveture(ploty, left_fitx, right_fitx)
     
     lane_curverad = (left_curverad + right_curverad)/2
 
-    cv2.putText(undist_img,'Radius of curvature  = %.2f m'%(lane_curverad),(50,50),
+    cv2.putText(result,'Radius of curvature  = %.2f m'%(lane_curverad),(50,50),
                 cv2.FONT_HERSHEY_SIMPLEX, 1,(255,255,255),2,cv2.LINE_AA)
     
     lane_center =  (right_fitx[-1] - left_fitx[-1])/2 + left_fitx[-1]
@@ -396,11 +409,10 @@ def draw(undist_img, binary_warped, Minv, ploty, left_fitx, right_fitx):
     else:
         text = text + "right of the center"
         
-    cv2.putText(undist_img,text,(50,100), cv2.FONT_HERSHEY_SIMPLEX, 1,(255,255,255),2,cv2.LINE_AA)
+    cv2.putText(result, text,(50,100), cv2.FONT_HERSHEY_SIMPLEX, 1,(255,255,255),2,cv2.LINE_AA)
    
     
-    # Combine the result with the original image
-    result = cv2.addWeighted(undist_img, 1, newwarp, 0.3, 0)
+
     
     #plt.imshow(result)
     return result
@@ -419,8 +431,8 @@ def process_image(image):
     binary_img = color_gradient_combined_binary(dst)
     binary_warped, M, Minv = warp_image_topview(binary_img)
     left_fit_first, right_fit_first = find_lanes_first_frame(binary_warped)
-    ploty, left_fitx_next, right_fitx_next = find_lanes_next_frame(binary_warped, left_fit_first, right_fit_first)
-    result = draw(dst, binary_warped, Minv, ploty, left_fitx_next, right_fitx_next)
+    color_warped, ploty, left_fitx_next, right_fitx_next = find_lanes_next_frame(binary_warped, left_fit_first, right_fit_first)
+    result = draw(dst, color_warped, binary_warped, Minv, ploty, left_fitx_next, right_fitx_next)
     return result
     
 #calibrate camera
